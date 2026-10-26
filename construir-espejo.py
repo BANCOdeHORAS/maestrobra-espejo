@@ -30,6 +30,7 @@ VENDOR = {  # lo que hay en la web -> copia local en el espejo
     "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js": "/lib/vendor/xlsx.full.min.js",
 }
 VENDOR_BAJAR = {}  # se bajan de la misma dirección que usa la web: así el navegador recibe exactamente lo mismo
+SOLO_CLOUDFLARE = {"_headers", "_redirects", "_routes.json", "wrangler.toml"}
 CAMBIOS_RE = [  # enlaces fijos a la web de Cloudflare que en el espejo apuntan al propio espejo
     (re.compile(r'(=\s*)"https://mandobra\.salvador-4f1\.workers\.dev"\s*;'), r'\1(location.protocol==="file:"?"https://mandobra.salvador-4f1.workers.dev":location.origin);'),
     (re.compile(r':"https://mandobra\.salvador-4f1\.workers\.dev/'), r':location.origin+"/'),
@@ -79,6 +80,8 @@ def construir():
     SALIDA.mkdir(parents=True)
     total = 0
     for f in lista["files"]:
+        if f["p"] in SOLO_CLOUDFLARE:  # ajustes de Cloudflare: la web no los sirve y en Pages no valen
+            continue
         datos = leer(f["p"])
         if hashlib.sha1(datos).hexdigest() != f["h"]:
             raise SystemExit(f"Huella distinta en {f['p']}: la web ha cambiado a mitad de copia. Se repite en la siguiente vuelta.")
@@ -109,7 +112,7 @@ def construir():
     v = json.loads((SALIDA / "version.json").read_text(encoding="utf-8")).get("version")
     if v != lista.get("version"):
         raise SystemExit(f"version.json dice {v} y la lista {lista.get('version')}: se repite en la siguiente vuelta.")
-    print(f"Espejo listo: {len(lista['files'])} archivos ({total // 1024} KB), {paginas} páginas con las librerías en local · versión {v}")
+    print(f"Espejo listo: {len(lista['files']) - sum(1 for x in lista['files'] if x['p'] in SOLO_CLOUDFLARE)} archivos ({total // 1024} KB), {paginas} páginas con las librerías en local · versión {v}")
     if restos:
         print("OJO, aún dependen de Cloudflare/jsDelivr: " + " | ".join(restos))
 
