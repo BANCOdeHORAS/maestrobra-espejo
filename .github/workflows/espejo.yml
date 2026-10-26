@@ -43,6 +43,7 @@ jobs:
         if: steps.mira.outputs.hace_falta == 'si'
         with:
           path: sitio
+          retention-days: 1
       - id: publicar
         if: steps.mira.outputs.hace_falta == 'si'
         uses: actions/deploy-pages@v4
