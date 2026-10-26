@@ -1,0 +1,57 @@
+# MaestrObra · espejo de la web en GitHub Pages (app.mandobra.es), fuera de Cloudflare.
+# Cada media hora mira si la web publicada tiene versión nueva y, si la tiene, la copia aquí.
+# También se puede lanzar a mano: Actions › Espejo › Run workflow (con «forzar» si hace falta).
+name: Espejo
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      forzar:
+        description: "Copiar aunque la versión sea la misma"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: espejo
+  cancel-in-progress: false
+jobs:
+  espejo:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicar.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: ¿Hay versión nueva?
+        id: mira
+        env:
+          FORZAR: ${{ inputs.forzar && '1' || '0' }}
+        run: python construir-espejo.py hace-falta
+      - name: Copiar la web
+        if: steps.mira.outputs.hace_falta == 'si'
+        run: python construir-espejo.py
+      - uses: actions/configure-pages@v5
+        if: steps.mira.outputs.hace_falta == 'si'
+      - uses: actions/upload-pages-artifact@v3
+        if: steps.mira.outputs.hace_falta == 'si'
+        with:
+          path: sitio
+      - id: publicar
+        if: steps.mira.outputs.hace_falta == 'si'
+        uses: actions/deploy-pages@v4
+      - name: Apuntar la versión (mantiene vivo el repositorio)
+        if: steps.mira.outputs.hace_falta == 'si'
+        run: |
+          echo "${{ steps.mira.outputs.version }} · $(date -u +%Y-%m-%dT%H:%MZ)" > ultima-version.txt
+          git config user.name "espejo-maestrobra"
+          git config user.email "espejo@users.noreply.github.com"
+          git add ultima-version.txt
+          git commit -m "Espejo: ${{ steps.mira.outputs.version }}" || true
+          git push || true
