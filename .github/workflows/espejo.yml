@@ -1,6 +1,8 @@
 # MaestrObra · espejo de la web en GitHub Pages (app.mandobra.es), fuera de Cloudflare.
 # Cada media hora mira si la web publicada tiene versión nueva y, si la tiene, la copia aquí.
 # También se puede lanzar a mano: Actions › Espejo › Run workflow (con «forzar» si hace falta).
+# 08-11-2026: el paso que pone la web en línea espera hasta 30 min y, si falla, lo reintenta una vez
+# (el 07-11 se canceló a los 10 min y la reserva se quedó dos versiones atrás).
 name: Espejo
 on:
   schedule:
@@ -21,9 +23,10 @@ concurrency:
 jobs:
   espejo:
     runs-on: ubuntu-latest
+    timeout-minutes: 75
     environment:
       name: github-pages
-      url: ${{ steps.publicar.outputs.page_url }}
+      url: ${{ steps.publicar.outputs.page_url || steps.publicar2.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -45,10 +48,25 @@ jobs:
           path: sitio
           retention-days: 1
       - id: publicar
+        name: Poner la web en línea
         if: steps.mira.outputs.hace_falta == 'si'
+        continue-on-error: true
         uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000
+          error_count: 20
+      - name: Si no se puso en línea, esperar un minuto
+        if: steps.mira.outputs.hace_falta == 'si' && steps.publicar.outcome == 'failure'
+        run: sleep 60
+      - id: publicar2
+        name: Poner la web en línea (segundo intento)
+        if: steps.mira.outputs.hace_falta == 'si' && steps.publicar.outcome == 'failure'
+        uses: actions/deploy-pages@v4
+        with:
+          timeout: 1800000
+          error_count: 20
       - name: Apuntar la versión (mantiene vivo el repositorio)
-        if: steps.mira.outputs.hace_falta == 'si'
+        if: steps.mira.outputs.hace_falta == 'si' && (steps.publicar.outcome == 'success' || steps.publicar2.outcome == 'success')
         run: |
           echo "${{ steps.mira.outputs.version }} · $(date -u +%Y-%m-%dT%H:%MZ)" > ultima-version.txt
           git config user.name "espejo-maestrobra"
